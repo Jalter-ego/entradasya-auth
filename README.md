@@ -5,10 +5,10 @@ Servicio de registro, inicio de sesión y emisión de JWT. Escucha en `127.0.0.1
 ## Arranque local
 
 1. Preparar PostgreSQL según [infra/postgres](../../infra/postgres/README.md). Se requiere Node 22.13 o superior.
-2. Desde `services/auth`, ejecutar `npm ci` y copiar `.env.example` a `.env` (`cp .env.example .env` o `Copy-Item .env.example .env` en PowerShell). Completar `DATABASE_URL` y la configuración siguiente.
-3. Ejecutar `npm run keys:generate` para generar un par nuevo. Para conservar el par de desarrollo anterior, mover el PEM privado a `services/auth/keys/auth-private.pem` y guardar el público correspondiente como `services/auth/keys/auth-public.pem`. Usar un mismo par para todo el entorno.
-4. Ejecutar `npm run migrate`. Para la demo, definir `DEMO_PASSWORD` en `.env` y ejecutar `npm run seed`.
-5. Ejecutar `npm run dev` o `npm run build` seguido de `npm start`. Comprobar `curl http://127.0.0.1:3001/health`, que verifica conexión y acceso a la tabla `users`.
+2. Desde `services/auth`, ejecutar `pnpm ci` y copiar `.env.example` a `.env` (`cp .env.example .env` o `Copy-Item .env.example .env` en PowerShell). Completar `DATABASE_URL` y la configuración siguiente.
+3. Ejecutar `pnpm run keys:generate` para generar un par nuevo. Para conservar el par de desarrollo anterior, mover el PEM privado a `services/auth/keys/auth-private.pem` y guardar el público correspondiente como `services/auth/keys/auth-public.pem`. Usar un mismo par para todo el entorno.
+4. Ejecutar `pnpm run migrate`. Para la demo, definir `DEMO_PASSWORD` en `.env` y ejecutar `pnpm run seed`.
+5. Ejecutar `pnpm run dev` o `pnpm run build` seguido de `pnpm start`. Comprobar `curl http://127.0.0.1:3001/health`, que verifica conexión y acceso a la tabla `users`.
 
 | Variable | Valor / uso |
 |---|---|
@@ -46,9 +46,9 @@ No subir `.env`, archivos PEM, tokens ni datos de PostgreSQL al repositorio.
 ## Pruebas
 
 ```bash
-npm run typecheck
-npm run build
-npm test
+pnpm run typecheck
+pnpm run build
+pnpm test
 ```
 
 Para incluir PostgreSQL, crear `auth_test` con el procedimiento opcional `WITH_TEST_DBS=1` de P4 o una base desechable `auth_test_*` con un usuario dueño. Copiar `.env.test.example` a `.env.test` y completar `TEST_DATABASE_URL`. Las pruebas migran un schema temporal, hacen peticiones HTTP reales y limpian el schema al terminar. Consultar [la verificación de P1](../../docs/P1_Autenticacion_y_Acceso.md) para los flujos integrados.
