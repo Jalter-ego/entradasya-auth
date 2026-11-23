@@ -1,12 +1,12 @@
 # auth · EntradasYa (P1)
 
-Servicio de registro, inicio de sesión y emisión de JWT. Escucha en `127.0.0.1:3001` y usa la base propia `auth_db` con el usuario `auth_user`. El contrato está en [auth.openapi.yaml](../../contracts/auth.openapi.yaml).
+Servicio de registro, inicio de sesión y emisión de JWT. Escucha en `127.0.0.1:3001` y usa la base propia `auth_db` con el usuario `auth_user`. El contrato está en [auth.openapi.yaml](https://github.com/Jalter-ego/entradasya-platform/blob/feat/auth/contracts/auth.openapi.yaml).
 
 ## Arranque local
 
-1. Preparar PostgreSQL según [infra/postgres](../../infra/postgres/README.md). Se requiere Node 22.13 o superior.
-2. Desde `services/auth`, ejecutar `pnpm ci` y copiar `.env.example` a `.env` (`cp .env.example .env` o `Copy-Item .env.example .env` en PowerShell). Completar `DATABASE_URL` y la configuración siguiente.
-3. Ejecutar `pnpm run keys:generate` para generar un par nuevo. Para conservar el par de desarrollo anterior, mover el PEM privado a `services/auth/keys/auth-private.pem` y guardar el público correspondiente como `services/auth/keys/auth-public.pem`. Usar un mismo par para todo el entorno.
+1. Preparar una base PostgreSQL para Auth y un usuario con permisos para migrarla. Se requiere Node 22.13 o superior y la versión de pnpm indicada en `package.json`.
+2. Desde la raíz del repositorio, ejecutar `pnpm install --frozen-lockfile` y copiar `.env.example` a `.env` (`cp .env.example .env` o `Copy-Item .env.example .env` en PowerShell). Completar `DATABASE_URL` y la configuración siguiente.
+3. Ejecutar `pnpm run keys:generate` para generar un par nuevo. Para reutilizar un par, guardar el PEM privado en `keys/auth-private.pem` y el público correspondiente en `keys/auth-public.pem`. Usar un mismo par para todo el entorno.
 4. Ejecutar `pnpm run migrate`. Para la demo, definir `DEMO_PASSWORD` en `.env` y ejecutar `pnpm run seed`.
 5. Ejecutar `pnpm run dev` o `pnpm run build` seguido de `pnpm start`. Comprobar `curl http://127.0.0.1:3001/health`, que verifica conexión y acceso a la tabla `users`.
 
@@ -43,6 +43,20 @@ Las contraseñas se guardan con scrypt y una sal aleatoria por cuenta. Los pará
 
 No subir `.env`, archivos PEM, tokens ni datos de PostgreSQL al repositorio.
 
+## Paquete de GitHub Actions
+
+Cada push a `develop` ejecuta el chequeo de tipos, las pruebas con PostgreSQL 16 y la compilación. En la ejecución de **CI Auth**, la sección **Artifacts** ofrece el reporte JUnit y, si pasan las verificaciones, el archivo `entradasya-auth-<versión>-<sha>-<intento>.tgz`.
+
+Extraer el archivo y ejecutar los siguientes comandos desde el directorio extraído con Node 22.13 o superior y la versión de pnpm indicada en `package.json`. Configurar primero `DATABASE_URL`, la clave privada RSA mediante `JWT_PRIVATE_KEY_FILE` o `JWT_PRIVATE_KEY` y las variables del entorno. Se pueden inyectar directamente o definir en un `.env` creado a partir de `.env.example`. Si la plataforma enruta tráfico al servicio desde fuera del proceso, ajustar `HOST` y `PORT` según su configuración.
+
+```bash
+pnpm install --prod --frozen-lockfile
+pnpm run migrate:prod
+pnpm start
+```
+
+Verificar que `GET /health` devuelva HTTP 200. El paquete incluye JavaScript compilado, las migraciones SQL y el generador de claves para preparar un entorno nuevo.
+
 ## Pruebas
 
 ```bash
@@ -51,4 +65,4 @@ pnpm run build
 pnpm test
 ```
 
-Para incluir PostgreSQL, crear `auth_test` con el procedimiento opcional `WITH_TEST_DBS=1` de P4 o una base desechable `auth_test_*` con un usuario dueño. Copiar `.env.test.example` a `.env.test` y completar `TEST_DATABASE_URL`. Las pruebas migran un schema temporal, hacen peticiones HTTP reales y limpian el schema al terminar. Consultar [la verificación de P1](../../docs/P1_Autenticacion_y_Acceso.md) para los flujos integrados.
+Para incluir PostgreSQL, crear una base desechable `auth_test` o `auth_test_*` con un usuario dueño. Definir `TEST_DATABASE_URL` en el entorno o en `.env.test`. Las pruebas migran un schema temporal, hacen peticiones HTTP reales y limpian el schema al terminar.
