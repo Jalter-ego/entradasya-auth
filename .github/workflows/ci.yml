@@ -1,0 +1,119 @@
+name: CI Auth
+
+on:
+  push:
+    branches: [develop]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-auth-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Pruebas, compilación y paquete
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: auth_test
+        ports:
+          - 5432/tcp
+        options: >-
+          --health-cmd "pg_isready -U postgres -d auth_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - name: Descargar código
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Instalar Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          package-manager-cache: false
+
+      - name: Instalar pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          cache: true
+
+      - name: Instalar dependencias
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Pruebas unitarias y de integración
+        env:
+          TEST_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:${{ job.services.postgres.ports[5432] }}/auth_test
+        run: |
+          mkdir -p reports
+          node --import tsx --test \
+            --test-reporter=spec --test-reporter-destination=stdout \
+            --test-reporter=junit --test-reporter-destination=reports/junit.xml \
+            'tests/*.test.ts'
+
+      - name: Compilar
+        run: pnpm build
+
+      - name: Empaquetar Auth
+        id: package
+        run: |
+          version=$(node -p "require('./package.json').version")
+          package="$RUNNER_TEMP/entradasya-auth-$version-${GITHUB_SHA::12}-$GITHUB_RUN_ATTEMPT.tgz"
+          tar -czf "$package" dist migrations scripts/generate-keys.mjs \
+            package.json pnpm-lock.yaml pnpm-workspace.yaml .env.example README.md
+          echo "path=$package" >> "$GITHUB_OUTPUT"
+
+      - name: Verificar migración y arranque desde el paquete
+        env:
+          AUTH_PACKAGE: ${{ steps.package.outputs.path }}
+          DATABASE_URL: postgres://postgres:postgres@127.0.0.1:${{ job.services.postgres.ports[5432] }}/auth_test
+          DB_SCHEMA: auth_package
+          HOST: 127.0.0.1
+          PORT: '3001'
+          JWT_PRIVATE_KEY_FILE: ./keys/auth-private.pem
+        run: |
+          package_dir=$(mktemp -d)
+          tar -xzf "$AUTH_PACKAGE" -C "$package_dir"
+          cd "$package_dir"
+          pnpm install --prod --frozen-lockfile
+          pnpm run keys:generate
+          pnpm run migrate:prod
+          setsid pnpm start > auth.log 2>&1 &
+          auth_pid=$!
+          trap 'kill -- "-$auth_pid" 2>/dev/null || true' EXIT
+          if ! curl --fail --silent --show-error --retry 10 --retry-connrefused \
+            --retry-delay 1 --max-time 3 "http://$HOST:$PORT/health"; then
+            cat auth.log
+            exit 1
+          fi
+
+      - name: Subir paquete de Auth
+        uses: actions/upload-artifact@v7
+        with:
+          path: ${{ steps.package.outputs.path }}
+          archive: false
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Subir reporte JUnit
+        if: ${{ !cancelled() && hashFiles('reports/junit.xml') != '' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: entradasya-auth-tests-${{ github.run_attempt }}
+          path: reports/junit.xml
+          if-no-files-found: error
+          retention-days: 30
